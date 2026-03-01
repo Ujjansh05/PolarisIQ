@@ -28,6 +28,13 @@ class PolarisModel:
         self, prompt: str, max_tokens: int = 800, temperature: float = 0.0
     ) -> str:
 
-        output = self.model(prompt, max_tokens=max_tokens, temperature=temperature)
+        response = self.model.create_chat_completion(
+            messages=[
+                {"role": "system", "content": "You are a strict JSON compiler. Output ONLY valid JSON with no extra text."},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
 
-        return output["choices"][0]["text"]
+        return response["choices"][0]["message"]["content"]

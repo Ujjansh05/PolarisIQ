@@ -15,11 +15,29 @@ class VisualizationExecutor:
     def execute(self, plan: dict):
 
         table = plan["data_scope"]["tables"][0]
-        params = plan["statistics"]["parameters"]
+
+        # Check both statistics and prediction for params
+        params = None
+        if plan.get("statistics") and plan["statistics"].get("parameters"):
+            params = plan["statistics"]["parameters"]
+        elif plan.get("prediction") and plan["prediction"].get("parameters"):
+            params = plan["prediction"]["parameters"]
+
+        if not params:
+            raise ValueError("Visualization plan missing parameters in statistics or prediction.")
 
         x_col = params["x"]
         y_col = params["y"]
         chart_type = params.get("chart_type", "line")
+
+        return self._render(table, x_col, y_col, chart_type)
+
+    def generate_plot(self, x: str, y: str, chart_type: str = "line", table: str = "test_table"):
+        """Tool-compatible handler called via ToolExecutor with kwargs."""
+        return self._render(table, x, y, chart_type)
+
+    def _render(self, table: str, x_col: str, y_col: str, chart_type: str = "line"):
+        """Shared rendering logic."""
 
         df = self.conn.execute(
             f"SELECT {x_col}, {y_col} FROM {table}"

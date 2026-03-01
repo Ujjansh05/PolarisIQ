@@ -45,6 +45,7 @@ def run_test():
         explanation_engine=explanation_engine,
         logger=logger,
         plan_memory=plan_memory,
+        tool_executor=engine.tool_executor,
     )
 
     print("Engine initialized.\n")

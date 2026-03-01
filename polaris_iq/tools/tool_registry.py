@@ -27,7 +27,8 @@ VISUALIZATION_SCHEMA = {
             "x": {"type": "string"},
             "y": {"type": "string"},
             "chart_type": {"type": "string", "enum": ["line", "scatter", "bar"]},
+            "table": {"type": "string"},
         },
-        "required": ["x", "y"],
+        "required": ["x", "y", "table"],
     },
 }

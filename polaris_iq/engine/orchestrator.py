@@ -1,7 +1,9 @@
 # polaris_iq/engine/orchestrator.py
 
+from polaris_iq.engine.tool_agent import ToolAgent
 from polaris_iq.planning.context_builder import build_llm_context
 from polaris_iq.planning.plan_generator import generate_structured_plan
+from polaris_iq.planning.plan_schema import QueryPlan
 from polaris_iq.planning.plan_validator import validate_plan
 
 
@@ -17,6 +19,7 @@ class PolarisOrchestrator:
         explanation_engine,
         logger,
         plan_memory,
+        tool_executor=None,
     ):
         self.conn = conn
         self.model = model
@@ -27,6 +30,7 @@ class PolarisOrchestrator:
         self.explanation_engine = explanation_engine
         self.logger = logger
         self.plan_memory = plan_memory
+        self.tool_executor = tool_executor
 
     # -------------------------------------------------
     # Deterministic Query Mode
@@ -38,7 +42,7 @@ class PolarisOrchestrator:
         stored_plan = self.plan_memory.retrieve(user_query)
 
         if stored_plan:
-            plan = stored_plan
+            plan = QueryPlan(**stored_plan)
         else:
             context = build_llm_context(self.conn, table_name)
 
@@ -70,4 +74,24 @@ class PolarisOrchestrator:
         return {
             "explanation": explanation,
             "metadata": {"intent": plan.intent, "engine_used": selected_engine},
+        }
+
+    # -------------------------------------------------
+    # Tool-Based Query Mode
+    # -------------------------------------------------
+
+    def handle_tool_query(self, user_query: str, table_name: str):
+
+        if not self.tool_executor:
+            raise RuntimeError("Tool executor not configured. Pass tool_executor to PolarisOrchestrator.")
+
+        context = build_llm_context(self.conn, table_name)
+
+        agent = ToolAgent(self.model, self.tool_executor)
+
+        result = agent.run(user_query, context)
+
+        return {
+            "tool_result": result,
+            "metadata": {"mode": "tool_agent", "table": table_name},
         }

@@ -37,7 +37,7 @@ class PolarisEngine:
 
         self.tool_registry.register(
             name="generate_plot",
-            handler=self.visualization_executor.execute,
+            handler=self.visualization_executor.generate_plot,
             schema=VISUALIZATION_SCHEMA,
         )
 
