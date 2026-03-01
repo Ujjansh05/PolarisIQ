@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-slate-100 min-h-screen antialiased selection:bg-primary selection:text-white;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-card backdrop-blur-xl border border-cardBorder shadow-md rounded-xl relative overflow-hidden;
+  }
+  
+  .glass::before {
+    content: '';
+    @apply absolute inset-0 bg-glass-gradient pointer-events-none;
+  }
+
+  .glass-neon {
+    @apply glass shadow-neon hover:shadow-neon-strong transition-shadow duration-300;
+  }
+  
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
