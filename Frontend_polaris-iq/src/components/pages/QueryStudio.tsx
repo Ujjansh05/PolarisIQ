@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Terminal, CheckCircle2, Circle, Clock, AlertCircle, Cpu, Sparkles } from 'lucide-react';
+import { Send, Terminal, CheckCircle2, Circle, Clock, AlertCircle, Cpu, Sparkles, Wrench } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { sendQuery } from '../../services/api';
-import type { QueryResponse } from '../../types/api';
+import { sendQuery, sendToolQuery, fetchTables } from '../../services/api';
+import type { QueryResponse, TableInfo } from '../../types/api';
 
 interface ChatMessage {
     role: 'user' | 'assistant' | 'error';
     content: string;
-    metadata?: QueryResponse['metadata'];
+    imageUrl?: string;
+    metadata?: QueryResponse['metadata'] | Record<string, unknown>;
 }
 
 const REASONING_STEPS = [
@@ -21,18 +22,30 @@ const REASONING_STEPS = [
 
 const QueryStudio = () => {
     const [prompt, setPrompt] = useState('');
-    const [tableName, setTableName] = useState('test_table');
+    const [tableName, setTableName] = useState('');
+    const [tables, setTables] = useState<TableInfo[]>([]);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [activeStep, setActiveStep] = useState(-1);
+    const [toolMode, setToolMode] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
     const stepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    useEffect(() => {
+        fetchTables()
+            .then(res => {
+                setTables(res.tables);
+                if (res.tables.length > 0 && !tableName) {
+                    setTableName(res.tables[0].name);
+                }
+            })
+            .catch(() => {});
+    }, []);
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    // Clean up step timer on unmount
     useEffect(() => {
         return () => {
             if (stepTimerRef.current) clearInterval(stepTimerRef.current);
@@ -54,34 +67,48 @@ const QueryStudio = () => {
 
     const stopReasoningAnimation = () => {
         if (stepTimerRef.current) clearInterval(stepTimerRef.current);
-        setActiveStep(REASONING_STEPS.length); // all done
+        setActiveStep(REASONING_STEPS.length);
     };
 
     const handleSubmit = async () => {
         const trimmed = prompt.trim();
-        if (!trimmed || isLoading) return;
+        if (!trimmed || isLoading || !tableName) return;
 
-        const userMsg: ChatMessage = { role: 'user', content: trimmed };
+        const userMsg: ChatMessage = { role: 'user', content: `${toolMode ? '[TOOL] ' : ''}${trimmed}` };
         setMessages(prev => [...prev, userMsg]);
         setPrompt('');
         setIsLoading(true);
         startReasoningAnimation();
 
         try {
-            const response = await sendQuery(trimmed, tableName);
-            stopReasoningAnimation();
+            let assistantMsg: ChatMessage;
 
-            const assistantMsg: ChatMessage = {
-                role: 'assistant',
-                content: response.explanation,
-                metadata: response.metadata,
-            };
+            if (toolMode) {
+                const response = await sendToolQuery(trimmed, tableName);
+                stopReasoningAnimation();
+                assistantMsg = {
+                    role: 'assistant',
+                    content: typeof response.tool_result === 'string' ? response.tool_result : JSON.stringify(response.tool_result),
+                    imageUrl: response.image_url ? `/api${response.image_url}` : undefined,
+                    metadata: response.metadata,
+                };
+            } else {
+                const response = await sendQuery(trimmed, tableName);
+                stopReasoningAnimation();
+                assistantMsg = {
+                    role: 'assistant',
+                    content: response.explanation,
+                    imageUrl: response.image_url ? `/api${response.image_url}` : undefined,
+                    metadata: response.metadata,
+                };
+            }
+
             setMessages(prev => [...prev, assistantMsg]);
         } catch (err) {
             stopReasoningAnimation();
             const errorMsg: ChatMessage = {
                 role: 'error',
-                content: err instanceof Error ? err.message : 'Failed to connect to PolarisIQ backend. Make sure the server is running on port 8000.',
+                content: err instanceof Error ? err.message : 'Failed to connect to PolarisIQ backend.',
             };
             setMessages(prev => [...prev, errorMsg]);
         } finally {
@@ -139,14 +166,23 @@ const QueryStudio = () => {
                                             <div className="bg-primary/10 p-3 rounded-2xl rounded-tr-none border border-primary/20 text-sm text-slate-300 whitespace-pre-wrap break-words">
                                                 {msg.content}
                                             </div>
+                                            {msg.imageUrl && (
+                                                <div className="rounded-xl overflow-hidden border border-primary/20 shadow-[0_0_20px_rgba(99,102,241,0.1)]">
+                                                    <img
+                                                        src={msg.imageUrl}
+                                                        alt="Generated visualization"
+                                                        className="w-full h-auto bg-slate-900/50"
+                                                        loading="lazy"
+                                                    />
+                                                </div>
+                                            )}
                                             {msg.metadata && (
                                                 <div className="flex gap-2 flex-wrap">
-                                                    <span className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary rounded-full border border-primary/20 font-medium">
-                                                        Intent: {msg.metadata.intent}
-                                                    </span>
-                                                    <span className="text-[10px] px-2 py-0.5 bg-secondary/10 text-secondary rounded-full border border-secondary/20 font-medium">
-                                                        Engine: {msg.metadata.engine_used}
-                                                    </span>
+                                                    {Object.entries(msg.metadata).map(([key, val]) => (
+                                                        <span key={key} className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary rounded-full border border-primary/20 font-medium">
+                                                            {key}: {String(val)}
+                                                        </span>
+                                                    ))}
                                                 </div>
                                             )}
                                         </div>
@@ -176,12 +212,30 @@ const QueryStudio = () => {
                     <div className="absolute -top-3 left-6 text-[10px] font-bold tracking-wider text-primary uppercase bg-[#070810] px-2">Prompt</div>
                     <div className="flex gap-2 items-center mb-2">
                         <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider shrink-0">Table:</label>
-                        <input
-                            type="text"
+                        <select
                             value={tableName}
-                            onChange={(e) => setTableName(e.target.value)}
-                            className="bg-slate-800/60 border border-slate-700/50 rounded px-2 py-1 text-xs text-slate-300 w-32 focus:outline-none focus:border-primary transition-colors"
-                        />
+                            onChange={e => setTableName(e.target.value)}
+                            className="bg-slate-800/60 border border-slate-700/50 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-primary transition-colors"
+                        >
+                            {tables.length === 0 && <option value="">No tables</option>}
+                            {tables.map(t => (
+                                <option key={t.name} value={t.name}>{t.name} ({t.rows.toLocaleString()} rows)</option>
+                            ))}
+                        </select>
+
+                        <button
+                            onClick={() => setToolMode(!toolMode)}
+                            className={cn(
+                                "ml-auto flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border transition-all",
+                                toolMode
+                                    ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                    : "bg-white/5 text-slate-500 border-white/10 hover:text-slate-300"
+                            )}
+                            title="Toggle tool mode for visualizations"
+                        >
+                            <Wrench size={10} />
+                            {toolMode ? 'Tool ON' : 'Tool'}
+                        </button>
                     </div>
                     <div className="flex gap-2 relative">
                         <input
@@ -189,16 +243,16 @@ const QueryStudio = () => {
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder="Ask anything about your data..."
+                            placeholder={toolMode ? "Describe a plot to generate..." : "Ask anything about your data..."}
                             className="flex-1 bg-transparent border-none focus:ring-0 text-sm placeholder-slate-500 py-2 pl-2 text-white glow-focus"
                             disabled={isLoading}
                         />
                         <button
                             onClick={handleSubmit}
-                            disabled={isLoading || !prompt.trim()}
+                            disabled={isLoading || !prompt.trim() || !tableName}
                             className={cn(
                                 "bg-primary text-white p-2 rounded-lg transition-all flex items-center justify-center shadow-neon",
-                                isLoading || !prompt.trim()
+                                isLoading || !prompt.trim() || !tableName
                                     ? "opacity-50 cursor-not-allowed"
                                     : "hover:bg-primary/90"
                             )}
@@ -222,6 +276,11 @@ const QueryStudio = () => {
                             isLoading ? "bg-primary animate-pulse" : "bg-slate-600"
                         )}></div>
                         AI Reasoning Engine
+                        {toolMode && (
+                            <span className="text-[10px] text-amber-400 font-medium ml-2 flex items-center gap-1">
+                                <Wrench size={10} /> Tool Mode
+                            </span>
+                        )}
                         {isLoading && (
                             <span className="text-[10px] text-primary font-medium ml-2 animate-pulse">Processing...</span>
                         )}
@@ -277,7 +336,6 @@ const QueryStudio = () => {
                         })}
                     </div>
 
-                    {/* Connection status */}
                     <div className="mt-6 p-3 rounded-lg bg-[#0a0a14] border border-slate-800/50 flex items-center justify-between">
                         <div className="flex items-center gap-2 text-xs text-slate-500">
                             <div className={cn(

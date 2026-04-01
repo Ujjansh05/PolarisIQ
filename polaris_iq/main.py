@@ -17,7 +17,7 @@ def run_test():
 
     print("\n=== STEP 1: Precomputing Dataset ===")
     precompute(
-        input_path="C:\Arka\Programming Language\PolarisIQ Project\Data\Salary_dataset.csv",
+        input_path=r"C:\Arka\Programming Language\PolarisIQ Project\Data\Salary_dataset.csv",
         table_name="test_table",
         duckdb_path="polaris.db",
     )
@@ -57,7 +57,7 @@ def run_test():
     print("=== STEP 3: Testing Deterministic Query ===")
 
     response = orchestrator.handle_query(
-        user_query="create a linear regression",
+        user_query="In how many year of experinence the salary will be equal to mean?",
         table_name="test_table",
     )
 

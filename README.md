@@ -18,13 +18,14 @@ Built on DuckDB, Polars, Scikit-learn, and Qwen2.5 (GGUF via llama-cpp), Polaris
 * Tool-calling agent architecture
 * Plan caching + adaptive engine optimization
 * Fully local execution (no external API calls)
+* **CLI-first interface** with interactive REPL
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 ```
-User Query
+User Query (CLI / API / Frontend)
     ↓
 LLM Planning (Structured JSON)
     ↓
@@ -41,38 +42,12 @@ PolarisIQ separates planning, execution, and explanation to ensure deterministic
 
 ---
 
-## 📂 Supported Data Formats
-
-* `.csv` / `.tsv`
-* `.parquet`
-* `.json` / `.ndjson`
-* `.xlsx` / `.xls`
-* `.duckdb`
-
-All data is persisted and processed using **DuckDB (OLAP)**.
-
----
-
-## 🧩 Tech Stack
-
-| Layer           | Technology              |
-| --------------- | ----------------------- |
-| OLAP Engine     | DuckDB                  |
-| Data Processing | Polars                  |
-| ML Engine       | Scikit-learn            |
-| LLM Runtime     | llama-cpp-python        |
-| Model           | Qwen2.5 7B (4-bit GGUF) |
-| Visualization   | Matplotlib              |
-
----
-
-## ⚙ Installation
+## Installation
 
 Python 3.10+
 
 ```bash
-pip install duckdb polars pyarrow pandas numpy scikit-learn \
-llama-cpp-python matplotlib fastapi uvicorn
+pip install -e .
 ```
 
 For GPU (CUDA):
@@ -85,26 +60,98 @@ pip install --upgrade llama-cpp-python
 
 ---
 
-## ▶ Running PolarisIQ
+## CLI Usage
 
-From the project root (one level above `polaris_iq/`):
+### Set your model path
 
 ```bash
-python -m polaris_iq.main
+# Option 1: Environment variable (recommended)
+set POLARISIQ_MODEL_PATH=C:\path\to\Qwen2.5-7B.Q4_K_M.gguf
+
+# Option 2: Pass --model-path flag to each command
+```
+
+### Ingest data
+
+```bash
+polarisiq ingest ./data/sales.csv --table sales
+polarisiq ingest ./data/customers.parquet --table customers
+```
+
+### Query your data
+
+```bash
+polarisiq query "find correlation between age and revenue" --table sales
+polarisiq query "perform linear regression with age predicting salary" --table salary_data
+polarisiq query "generate a scatter plot of age vs revenue" --table sales --tool
+```
+
+### Interactive REPL
+
+```bash
+polarisiq shell --table sales
+
+# Inside the shell:
+# > show average salary by department
+# > /tool                          (toggle visualization mode)
+# > generate a line plot of revenue vs age
+# > /table customers               (switch table)
+# > /quit
+```
+
+### List tables
+
+```bash
+polarisiq tables
+polarisiq tables --schema sales
+```
+
+### Start the API server (for the web frontend)
+
+```bash
+polarisiq serve --port 8000
 ```
 
 ---
 
-## 📊 Example Capabilities
+## Supported Data Formats
 
-* “Perform linear regression with age predicting revenue.”
-* “Find correlation between churn probability and revenue.”
-* “Generate a line plot of revenue vs age.”
-* “Identify high-value customers and analyze churn risk.”
+* `.csv` / `.tsv`
+* `.parquet`
+* `.json` / `.ndjson`
+* `.xlsx` / `.xls`
+* `.duckdb`
+
+All data is persisted and processed using **DuckDB (OLAP)**.
 
 ---
 
-## 🔒 Design Principles
+## Tech Stack
+
+| Layer           | Technology              |
+| --------------- | ----------------------- |
+| OLAP Engine     | DuckDB                  |
+| Data Processing | Polars                  |
+| ML Engine       | Scikit-learn            |
+| LLM Runtime     | llama-cpp-python        |
+| Model           | Qwen2.5 7B (4-bit GGUF) |
+| Visualization   | Matplotlib              |
+| CLI Framework   | Typer + Rich            |
+| API Server      | FastAPI + Uvicorn       |
+| Frontend        | React + Vite (optional) |
+
+---
+
+## Example Capabilities
+
+* "Perform linear regression with age predicting revenue."
+* "Find correlation between churn probability and revenue."
+* "Generate a line plot of revenue vs age."
+* "Identify high-value customers and analyze churn risk."
+
+---
+
+## Design Principles
 
 * Deterministic execution
 * Strict JSON plan validation
@@ -115,13 +162,13 @@ python -m polaris_iq.main
 
 ---
 
-## 🎯 Project Status
+## Environment Variables
 
-* Deterministic analytical engine
-* Autonomous multi-step workflows
-* Tool-calling agent system
-* Visualization support
-* Adaptive execution optimization
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `POLARISIQ_MODEL_PATH` | Path to GGUF model file | *(required)* |
+| `POLARISIQ_DB_PATH` | Path to DuckDB database | `polaris.db` |
+| `POLARISIQ_CONTEXT_SIZE` | LLM context window size | `4096` |
 
 ---
 

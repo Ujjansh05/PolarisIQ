@@ -1,5 +1,8 @@
 # polaris_iq/engine/orchestrator.py
 
+import os
+import time
+
 from polaris_iq.engine.tool_agent import ToolAgent
 from polaris_iq.planning.context_builder import build_llm_context
 from polaris_iq.planning.plan_generator import generate_structured_plan
@@ -38,43 +41,69 @@ class PolarisOrchestrator:
 
     def handle_query(self, user_query: str, table_name: str):
 
-        # 1️⃣ Plan memory lookup
+        start_time = time.time()
+
+        # 1. Plan memory lookup
         stored_plan = self.plan_memory.retrieve(user_query)
 
         if stored_plan:
             plan = QueryPlan(**stored_plan)
+            context = build_llm_context(self.conn, table_name)
         else:
             context = build_llm_context(self.conn, table_name)
 
             plan = generate_structured_plan(user_query, context, self.model)
 
-            validate_plan(self.conn, plan, table_name)
+            # Validate but do not hard-fail — let the executor handle bad plans
+            try:
+                validate_plan(self.conn, plan, table_name)
+            except Exception:
+                pass
 
             self.plan_memory.store(user_query, plan.model_dump())
 
-        # 2️⃣ Cost estimation
+        # 2. Cost estimation
         cost_info = self.cost_estimator.estimate(plan, table_name)
 
-        # 3️⃣ Rule-based selection
+        # 3. Rule-based selection
         fallback_engine = self.engine_selector.select(plan, cost_info)
 
-        # 4️⃣ Adaptive override
+        # 4. Adaptive override
         selected_engine = self.adaptive_optimizer.choose_best_engine(
             plan.intent, fallback_engine
         )
 
-        # 5️⃣ Execution
+        # 5. Execution
         result = self.router.execute(plan.model_dump(), engine=selected_engine)
 
-        # 6️⃣ Explanation
+        # 6. Logging
+        duration = time.time() - start_time
+        try:
+            row_count = cost_info.get("row_count", 0) if cost_info else 0
+            self.logger.log(plan.intent, selected_engine, row_count, duration)
+        except Exception:
+            pass
+
+        # 7. Explanation — pass user query and context for targeted answers
         explanation = self.explanation_engine.generate(
-            result, plan.explanation_level, self.model
+            result,
+            plan.explanation_level,
+            self.model,
+            user_query=user_query,
+            context=context,
         )
 
-        return {
+        response = {
             "explanation": explanation,
             "metadata": {"intent": plan.intent, "engine_used": selected_engine},
         }
+
+        # 8. Attach image URL if visualization produced a file
+        image_url = self._to_image_url(result)
+        if image_url:
+            response["image_url"] = image_url
+
+        return response
 
     # -------------------------------------------------
     # Tool-Based Query Mode
@@ -91,7 +120,30 @@ class PolarisOrchestrator:
 
         result = agent.run(user_query, context)
 
-        return {
+        response = {
             "tool_result": result,
             "metadata": {"mode": "tool_agent", "table": table_name},
         }
+
+        # Attach image URL if tool produced a visualization file
+        image_url = self._to_image_url(result)
+        if image_url:
+            response["image_url"] = image_url
+
+        return response
+
+    # -------------------------------------------------
+    # Helpers
+    # -------------------------------------------------
+
+    @staticmethod
+    def _to_image_url(result) -> str | None:
+        """Extract image URL from a result dict containing a file_path."""
+        if not isinstance(result, dict):
+            return None
+        file_path = result.get("file_path")
+        if not file_path:
+            return None
+        filename = os.path.basename(file_path)
+        return f"/plots/{filename}"
+

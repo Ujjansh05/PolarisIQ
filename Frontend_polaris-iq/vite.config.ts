@@ -11,6 +11,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      '/api/plots': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/plots/, '/plots'),
+      },
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,

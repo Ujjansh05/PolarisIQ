@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "polarisiq"
+version = "0.1.0"
+description = "AI-Driven Local Data Analytics Engine"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Ujjansh"},
+]
+
+dependencies = [
+    "duckdb>=0.9.0",
+    "polars>=0.20.0",
+    "pyarrow>=14.0.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "scikit-learn>=1.3.0",
+    "pydantic>=2.0.0",
+    "diskcache>=5.6.0",
+    "matplotlib>=3.7.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "python-multipart>=0.0.6",
+]
+gpu = [
+    "llama-cpp-python>=0.2.0",
+]
+all = [
+    "polarisiq[api,gpu]",
+    "scipy",
+    "statsmodels",
+    "joblib",
+    "numexpr",
+]
+
+[project.scripts]
+polarisiq = "polaris_iq.cli.main:app"
+
+[tool.setuptools.packages.find]
+include = ["polaris_iq*"]

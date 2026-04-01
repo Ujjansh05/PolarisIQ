@@ -1,114 +1,190 @@
-import { Activity, CheckCircle2, Circle, ArrowRight, Save, UploadCloud, Cpu, Database } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Activity, CheckCircle2, Circle, Clock, RefreshCw, Zap, Database, Cpu } from 'lucide-react';
+import { fetchLogs } from '../../services/api';
+import type { LogEntry } from '../../types/api';
 
-const PipelineNode = ({ title, status, icon: Icon, time }) => {
-    const isDone = status === 'done';
-    const isActive = status === 'active';
+const ENGINE_COLORS: Record<string, string> = {
+    duckdb: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
+    python_sklearn: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
+    polars: 'text-cyan-400 bg-cyan-400/10 border-cyan-400/20',
+    visualization: 'text-purple-400 bg-purple-400/10 border-purple-400/20',
+};
 
-    return (
-        <div className={`relative glass p-4 w-60 shrink-0 z-10 ${isActive ? 'shadow-neon border-primary/50' : ''}`}>
-            <div className="flex justify-between items-start mb-3">
-                <div className={`p-2 rounded-lg ${isActive ? 'bg-primary/20 text-primary' : 'bg-white/5 text-slate-400'}`}>
-                    <Icon size={20} />
-                </div>
-                {isDone ? (
-                    <CheckCircle2 size={18} className="text-emerald-400" />
-                ) : isActive ? (
-                    <div className="relative">
-                        <Circle size={18} className="text-primary animate-spin" style={{ animationDuration: '3s' }} />
-                        <div className="absolute inset-0 bg-primary/20 blur-md rounded-full animate-pulse"></div>
-                    </div>
-                ) : (
-                    <Circle size={18} className="text-slate-600" />
-                )}
-            </div>
-            <h3 className={`font-medium mb-1 ${isActive ? 'text-white' : 'text-slate-300'}`}>{title}</h3>
-            <div className="flex justify-between items-center text-xs">
-                <span className={`${isActive ? 'text-primary' : isDone ? 'text-emerald-400' : 'text-slate-500'}`}>
-                    {isActive ? 'Processing...' : isDone ? 'Completed' : 'Pending'}
-                </span>
-                <span className="text-slate-500">{time}</span>
-            </div>
-        </div>
-    );
+const ENGINE_ICONS: Record<string, React.ElementType> = {
+    duckdb: Database,
+    python_sklearn: Cpu,
+    polars: Zap,
+    visualization: Activity,
 };
 
 const PipelineMonitor = () => {
+    const [logs, setLogs] = useState<LogEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const loadLogs = async () => {
+        setLoading(true);
+        try {
+            const res = await fetchLogs(100);
+            setLogs(res.logs);
+        } catch {
+            setLogs([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { loadLogs(); }, []);
+
+    // Compute summary stats
+    const totalQueries = logs.length;
+    const avgLatency = logs.length > 0
+        ? Math.round(logs.reduce((sum, l) => sum + l.execution_time_ms, 0) / logs.length)
+        : 0;
+    const totalRows = logs.reduce((sum, l) => sum + (l.row_count || 0), 0);
+
+    // Engine usage breakdown
+    const engineCounts: Record<string, number> = {};
+    logs.forEach(l => {
+        engineCounts[l.engine] = (engineCounts[l.engine] || 0) + 1;
+    });
+
     return (
         <div className="h-full flex flex-col gap-6 animate-in fade-in duration-500">
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight text-white mb-2">Pipeline Monitor</h1>
-                <p className="text-slate-400">Visualizing real-time data ingestion and processing workflows.</p>
+            <div className="flex justify-between items-end">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight text-white mb-2">Pipeline Monitor</h1>
+                    <p className="text-slate-400">Query execution history and engine performance.</p>
+                </div>
+                <button
+                    onClick={loadLogs}
+                    disabled={loading}
+                    className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors px-3 py-2 rounded-lg border border-cardBorder hover:border-slate-600"
+                >
+                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                    Refresh
+                </button>
             </div>
 
-            <div className="glass p-8 flex-1 flex flex-col justify-center relative overflow-hidden">
-                {/* Background Grid Pattern */}
-                <div className="absolute inset-0 border-white/[0.02] bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
-
-                <h3 className="absolute top-6 left-6 text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                    <Activity size={16} className="text-primary" /> Active Job: Daily Analytics ETL
-                </h3>
-
-                <div className="relative max-w-5xl mx-auto w-full">
-                    {/* Connecting Lines */}
-                    <div className="absolute top-1/2 left-0 w-full h-1 -translate-y-1/2 bg-slate-800 z-0">
-                        <div className="h-full w-[60%] bg-gradient-to-r from-emerald-500 to-primary relative shadow-[0_0_10px_#6366f1]">
-                            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full blur-sm opacity-50 animate-pulse"></div>
-                        </div>
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="glass p-4 flex items-center gap-4">
+                    <div className="p-2 rounded-lg bg-primary/20">
+                        <Activity size={20} className="text-primary" />
                     </div>
-
-                    <div className="flex justify-between items-center relative z-10 gap-8 hide-scrollbar overflow-x-auto pb-4 pt-4">
-                        <PipelineNode
-                            title="Data Extraction"
-                            status="done"
-                            icon={UploadCloud}
-                            time="12m 40s"
-                        />
-
-                        <ArrowRight className="text-emerald-400 shrink-0 mx-2" />
-
-                        <PipelineNode
-                            title="Schema Resolution"
-                            status="done"
-                            icon={Database}
-                            time="4m 12s"
-                        />
-
-                        <ArrowRight className="text-emerald-400 shrink-0 mx-2" />
-
-                        <PipelineNode
-                            title="AI Structuring via LLM"
-                            status="active"
-                            icon={Cpu}
-                            time="Running..."
-                        />
-
-                        <ArrowRight className="text-slate-600 shrink-0 mx-2" />
-
-                        <PipelineNode
-                            title="Load to OLAP"
-                            status="pending"
-                            icon={Save}
-                            time="-"
-                        />
+                    <div>
+                        <p className="text-xs text-slate-400">Total Queries</p>
+                        <p className="text-xl font-bold text-white">{totalQueries}</p>
                     </div>
                 </div>
-
-                <div className="absolute bottom-6 left-6 right-6 p-4 rounded-xl bg-[#0a0a14] border border-slate-800 flex items-center justify-between">
-                    <div className="flex gap-4 font-mono text-xs">
-                        <div className="flex items-center gap-2">
-                            <span className="text-slate-500">Processed:</span>
-                            <span className="text-primary font-bold">14.2 GB</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-slate-500">Rate:</span>
-                            <span className="text-white">450 MB/s</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-slate-500">Errors:</span>
-                            <span className="text-emerald-400 text-white">0</span>
-                        </div>
+                <div className="glass p-4 flex items-center gap-4">
+                    <div className="p-2 rounded-lg bg-secondary/20">
+                        <Clock size={20} className="text-secondary" />
                     </div>
-                    <button className="text-xs bg-white/5 hover:bg-white/10 text-white px-3 py-1.5 rounded transition-colors border border-white/10">View Detailed Logs</button>
+                    <div>
+                        <p className="text-xs text-slate-400">Avg Latency</p>
+                        <p className="text-xl font-bold text-white">{avgLatency}ms</p>
+                    </div>
+                </div>
+                <div className="glass p-4 flex items-center gap-4">
+                    <div className="p-2 rounded-lg bg-emerald-500/20">
+                        <Database size={20} className="text-emerald-400" />
+                    </div>
+                    <div>
+                        <p className="text-xs text-slate-400">Rows Processed</p>
+                        <p className="text-xl font-bold text-white">{totalRows.toLocaleString()}</p>
+                    </div>
+                </div>
+                <div className="glass p-4 flex items-center gap-4">
+                    <div className="p-2 rounded-lg bg-amber-500/20">
+                        <Cpu size={20} className="text-amber-400" />
+                    </div>
+                    <div>
+                        <p className="text-xs text-slate-400">Engines Used</p>
+                        <p className="text-xl font-bold text-white">{Object.keys(engineCounts).length}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 min-h-0">
+                {/* Engine Breakdown */}
+                <div className="glass p-6">
+                    <h3 className="text-sm font-bold text-slate-300 mb-4 uppercase tracking-wider">Engine Usage</h3>
+                    {Object.keys(engineCounts).length > 0 ? (
+                        <div className="space-y-4">
+                            {Object.entries(engineCounts)
+                                .sort(([, a], [, b]) => b - a)
+                                .map(([eng, count]) => {
+                                    const Icon = ENGINE_ICONS[eng] || Zap;
+                                    const pct = Math.round((count / totalQueries) * 100);
+                                    return (
+                                        <div key={eng} className="space-y-2">
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-slate-300 flex items-center gap-2">
+                                                    <Icon size={14} /> {eng}
+                                                </span>
+                                                <span className="text-slate-400 font-mono text-xs">{count} ({pct}%)</span>
+                                            </div>
+                                            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-primary rounded-full transition-all"
+                                                    style={{ width: `${pct}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-slate-500">No queries yet.</p>
+                    )}
+                </div>
+
+                {/* Execution Log Table */}
+                <div className="lg:col-span-3 glass p-6 flex flex-col overflow-hidden">
+                    <h3 className="text-sm font-bold text-slate-300 mb-4 uppercase tracking-wider flex items-center gap-2">
+                        <Activity size={16} className="text-primary" />
+                        Execution Log
+                    </h3>
+
+                    {logs.length === 0 ? (
+                        <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
+                            No execution history yet. Run some queries first.
+                        </div>
+                    ) : (
+                        <div className="flex-1 overflow-y-auto scrollbar-hide">
+                            <div className="space-y-2">
+                                {logs.map((log, i) => {
+                                    const Icon = ENGINE_ICONS[log.engine] || Zap;
+                                    const colorClass = ENGINE_COLORS[log.engine] || 'text-slate-400 bg-slate-400/10 border-slate-400/20';
+
+                                    return (
+                                        <div key={i} className="flex items-center gap-4 p-3 rounded-lg border border-cardBorder hover:bg-white/5 transition-colors">
+                                            <div className="shrink-0">
+                                                <CheckCircle2 size={16} className="text-emerald-500" />
+                                            </div>
+
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`text-xs px-2 py-0.5 rounded-full border ${colorClass} font-medium flex items-center gap-1`}>
+                                                        <Icon size={10} /> {log.engine}
+                                                    </span>
+                                                    <span className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full border border-primary/20">
+                                                        {log.intent}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-slate-500 font-mono truncate">{log.timestamp}</p>
+                                            </div>
+
+                                            <div className="text-right shrink-0">
+                                                <p className="text-sm text-white font-mono">{log.execution_time_ms}ms</p>
+                                                <p className="text-xs text-slate-500">{log.row_count?.toLocaleString() || '—'} rows</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
