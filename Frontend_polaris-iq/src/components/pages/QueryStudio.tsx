@@ -1,24 +1,43 @@
-import { useState, useRef, useEffect } from 'react';
-import { Send, Terminal, CheckCircle2, Circle, Clock, AlertCircle, Cpu, Sparkles, Wrench } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+    Send, Terminal, CheckCircle2, Circle, Clock,
+    AlertCircle, Sparkles, Wrench, ZoomIn, Database,
+    ArrowRight, Cpu
+} from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { sendQuery, sendToolQuery, fetchTables } from '../../services/api';
 import type { QueryResponse, TableInfo } from '../../types/api';
+import ImageLightbox from '../ui/ImageLightbox';
 
 interface ChatMessage {
+    id: string;
     role: 'user' | 'assistant' | 'error';
     content: string;
     imageUrl?: string;
     metadata?: QueryResponse['metadata'] | Record<string, unknown>;
+    timestamp: number;
 }
 
 const REASONING_STEPS = [
-    'Understanding natural language query',
-    'Mapping entities to hybrid OLAP schema',
-    'Generating optimized execution plan',
-    'Selecting best execution engine',
-    'Executing query pipeline',
-    'Generating explanation',
+    { label: 'Understanding natural language query', icon: '🧠' },
+    { label: 'Mapping entities to hybrid OLAP schema', icon: '🗺️' },
+    { label: 'Generating optimized execution plan', icon: '⚡' },
+    { label: 'Selecting best execution engine', icon: '🔧' },
+    { label: 'Executing query pipeline', icon: '🚀' },
+    { label: 'Generating explanation', icon: '📊' },
 ];
+
+const SUGGESTED_QUERIES = [
+    'Show me the distribution of values',
+    'What are the top 10 records by count?',
+    'Generate a bar chart of the data',
+    'Show correlations between numeric columns',
+    'Summarize the dataset statistics',
+];
+
+let msgIdCounter = 0;
+const nextMsgId = () => `msg-${++msgIdCounter}-${Date.now()}`;
 
 const QueryStudio = () => {
     const [prompt, setPrompt] = useState('');
@@ -28,7 +47,10 @@ const QueryStudio = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [activeStep, setActiveStep] = useState(-1);
     const [toolMode, setToolMode] = useState(false);
+    const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+    const [lightboxId, setLightboxId] = useState<string | undefined>();
     const chatEndRef = useRef<HTMLDivElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
     const stepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
@@ -52,6 +74,18 @@ const QueryStudio = () => {
         };
     }, []);
 
+    // Auto-resize textarea
+    const adjustTextarea = useCallback(() => {
+        const ta = textareaRef.current;
+        if (!ta) return;
+        ta.style.height = 'auto';
+        ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
+    }, []);
+
+    useEffect(() => {
+        adjustTextarea();
+    }, [prompt, adjustTextarea]);
+
     const startReasoningAnimation = () => {
         setActiveStep(0);
         let step = 0;
@@ -68,13 +102,19 @@ const QueryStudio = () => {
     const stopReasoningAnimation = () => {
         if (stepTimerRef.current) clearInterval(stepTimerRef.current);
         setActiveStep(REASONING_STEPS.length);
+        setTimeout(() => setActiveStep(-1), 1500);
     };
 
     const handleSubmit = async () => {
         const trimmed = prompt.trim();
         if (!trimmed || isLoading || !tableName) return;
 
-        const userMsg: ChatMessage = { role: 'user', content: `${toolMode ? '[TOOL] ' : ''}${trimmed}` };
+        const userMsg: ChatMessage = {
+            id: nextMsgId(),
+            role: 'user',
+            content: `${toolMode ? '[TOOL] ' : ''}${trimmed}`,
+            timestamp: Date.now(),
+        };
         setMessages(prev => [...prev, userMsg]);
         setPrompt('');
         setIsLoading(true);
@@ -87,19 +127,23 @@ const QueryStudio = () => {
                 const response = await sendToolQuery(trimmed, tableName);
                 stopReasoningAnimation();
                 assistantMsg = {
+                    id: nextMsgId(),
                     role: 'assistant',
                     content: typeof response.tool_result === 'string' ? response.tool_result : JSON.stringify(response.tool_result),
                     imageUrl: response.image_url ? `/api${response.image_url}` : undefined,
                     metadata: response.metadata,
+                    timestamp: Date.now(),
                 };
             } else {
                 const response = await sendQuery(trimmed, tableName);
                 stopReasoningAnimation();
                 assistantMsg = {
+                    id: nextMsgId(),
                     role: 'assistant',
                     content: response.explanation,
                     imageUrl: response.image_url ? `/api${response.image_url}` : undefined,
                     metadata: response.metadata,
+                    timestamp: Date.now(),
                 };
             }
 
@@ -107,8 +151,10 @@ const QueryStudio = () => {
         } catch (err) {
             stopReasoningAnimation();
             const errorMsg: ChatMessage = {
+                id: nextMsgId(),
                 role: 'error',
                 content: err instanceof Error ? err.message : 'Failed to connect to PolarisIQ backend.',
+                timestamp: Date.now(),
             };
             setMessages(prev => [...prev, errorMsg]);
         } finally {
@@ -123,99 +169,311 @@ const QueryStudio = () => {
         }
     };
 
+    const openLightbox = (src: string, layoutId: string) => {
+        setLightboxSrc(src);
+        setLightboxId(layoutId);
+    };
+
+    const handleSuggestedQuery = (q: string) => {
+        setPrompt(q);
+        textareaRef.current?.focus();
+    };
+
+    // Message animation variants
+    const messageVariants = {
+        hidden: { opacity: 0, y: 20, scale: 0.97 },
+        visible: { opacity: 1, y: 0, scale: 1 },
+        exit: { opacity: 0, y: -10 },
+    };
+
+    const metadataVariants = {
+        hidden: { opacity: 0, scale: 0.8 },
+        visible: (i: number) => ({
+            opacity: 1,
+            scale: 1,
+            transition: { delay: 0.3 + i * 0.08, type: 'spring', stiffness: 500, damping: 30 },
+        }),
+    };
+
     return (
-        <div className="h-full flex gap-6 animate-in fade-in duration-500">
-            {/* Left Panel: Chat Interface */}
-            <div className="w-1/3 flex flex-col gap-4">
-                <div className="glass p-4 rounded-b-none border-b-0 flex-1 flex flex-col overflow-hidden">
-                    <div className="flex-1 overflow-y-auto space-y-4 mb-4 scrollbar-hide">
-                        {messages.length === 0 && (
-                            <div className="flex flex-col items-center justify-center h-full text-center opacity-60">
-                                <Sparkles size={32} className="text-primary mb-3" />
-                                <p className="text-sm text-slate-400">Ask a question about your data</p>
-                                <p className="text-xs text-slate-500 mt-1">e.g. "Show me average salary by education level"</p>
-                            </div>
-                        )}
+        <div className="h-full flex flex-col animate-in fade-in duration-500">
+            {/* Inline Reasoning Progress Bar */}
+            <AnimatePresence>
+                {activeStep >= 0 && activeStep < REASONING_STEPS.length && (
+                    <motion.div
+                        className="mb-4"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.35 }}
+                    >
+                        <div className="glass p-3 relative overflow-hidden">
+                            {/* Shimmer effect */}
+                            <div className="reasoning-shimmer" />
 
-                        {messages.map((msg, idx) => (
-                            <div key={idx} className="flex gap-3">
-                                {msg.role === 'user' ? (
-                                    <>
-                                        <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0">
-                                            <span className="text-xs font-bold text-slate-300">U</span>
-                                        </div>
-                                        <div className="bg-slate-800/50 p-3 rounded-2xl rounded-tl-none border border-slate-700/50 text-sm text-slate-300">
-                                            {msg.content}
-                                        </div>
-                                    </>
-                                ) : msg.role === 'error' ? (
-                                    <>
-                                        <div className="w-8 h-8 rounded-full bg-rose-500/20 flex items-center justify-center shrink-0">
-                                            <AlertCircle size={14} className="text-rose-400" />
-                                        </div>
-                                        <div className="bg-rose-500/10 p-3 rounded-2xl rounded-tr-none border border-rose-500/20 text-sm text-rose-300">
-                                            {msg.content}
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(99,102,241,0.3)]">
-                                            <Terminal size={14} className="text-primary" />
-                                        </div>
-                                        <div className="space-y-2 flex-1 min-w-0">
-                                            <div className="bg-primary/10 p-3 rounded-2xl rounded-tr-none border border-primary/20 text-sm text-slate-300 whitespace-pre-wrap break-words">
-                                                {msg.content}
-                                            </div>
-                                            {msg.imageUrl && (
-                                                <div className="rounded-xl overflow-hidden border border-primary/20 shadow-[0_0_20px_rgba(99,102,241,0.1)]">
-                                                    <img
-                                                        src={msg.imageUrl}
-                                                        alt="Generated visualization"
-                                                        className="w-full h-auto bg-slate-900/50"
-                                                        loading="lazy"
-                                                    />
-                                                </div>
-                                            )}
-                                            {msg.metadata && (
-                                                <div className="flex gap-2 flex-wrap">
-                                                    {Object.entries(msg.metadata).map(([key, val]) => (
-                                                        <span key={key} className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary rounded-full border border-primary/20 font-medium">
-                                                            {key}: {String(val)}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </>
+                            <div className="flex items-center gap-3 mb-2">
+                                <Cpu size={14} className="text-primary animate-pulse" />
+                                <span className="text-xs font-bold text-slate-300 tracking-wider uppercase">
+                                    AI Reasoning Pipeline
+                                </span>
+                                {toolMode && (
+                                    <span className="text-[9px] text-amber-400 font-semibold flex items-center gap-1 ml-1">
+                                        <Wrench size={9} /> Tool Mode
+                                    </span>
                                 )}
+                                <span className="text-[10px] text-primary font-mono ml-auto animate-pulse">
+                                    Processing...
+                                </span>
                             </div>
-                        ))}
 
+                            <div className="flex gap-1 items-center">
+                                {REASONING_STEPS.map((step, idx) => {
+                                    const isActive = activeStep === idx;
+                                    const isDone = activeStep > idx;
+
+                                    return (
+                                        <div key={idx} className="flex items-center gap-1 flex-1">
+                                            <div className="flex-1 relative">
+                                                <div className={cn(
+                                                    "h-1.5 rounded-full transition-all duration-500",
+                                                    isDone ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" :
+                                                        isActive ? "bg-primary shadow-[0_0_8px_rgba(99,102,241,0.4)] animate-pulse" :
+                                                            "bg-slate-800"
+                                                )} />
+                                                {isActive && (
+                                                    <motion.div
+                                                        className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-md"
+                                                        initial={{ opacity: 0, y: 5 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        exit={{ opacity: 0 }}
+                                                    >
+                                                        {step.icon} {step.label}
+                                                    </motion.div>
+                                                )}
+                                            </div>
+                                            {idx < REASONING_STEPS.length - 1 && (
+                                                <ArrowRight size={8} className={cn(
+                                                    "shrink-0 transition-colors duration-300",
+                                                    isDone ? "text-emerald-500" : "text-slate-700"
+                                                )} />
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* All-done flash */}
+            <AnimatePresence>
+                {activeStep === REASONING_STEPS.length && (
+                    <motion.div
+                        className="mb-4"
+                        initial={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.5, delay: 0.5 }}
+                    >
+                        <div className="glass p-3 border-emerald-500/20">
+                            <div className="flex items-center gap-2">
+                                <CheckCircle2 size={14} className="text-emerald-500" />
+                                <span className="text-xs font-bold text-emerald-400 tracking-wider uppercase">
+                                    Pipeline Complete
+                                </span>
+                                <div className="flex gap-0.5 ml-auto">
+                                    {REASONING_STEPS.map((_, idx) => (
+                                        <div key={idx} className="w-3 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]" />
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Chat Area — Full Width */}
+            <div className="flex-1 flex flex-col overflow-hidden glass">
+                <div className="flex-1 overflow-y-auto p-6 space-y-5 scrollbar-hide">
+                    {/* Empty state */}
+                    {messages.length === 0 && (
+                        <motion.div
+                            className="flex flex-col items-center justify-center h-full text-center"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.2 }}
+                        >
+                            <div className="relative mb-6">
+                                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center border border-primary/10">
+                                    <Sparkles size={28} className="text-primary" />
+                                </div>
+                                <div className="absolute -inset-4 bg-primary/5 rounded-3xl blur-xl -z-10" />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-200 mb-2">Ask PolarisIQ Anything</h3>
+                            <p className="text-sm text-slate-500 max-w-md mb-8">
+                                Query your data using natural language. PolarisIQ generates optimized execution plans, selects the right engine, and explains results.
+                            </p>
+
+                            {/* Suggestion pills */}
+                            <div className="flex flex-wrap gap-2 justify-center max-w-lg">
+                                {SUGGESTED_QUERIES.map((q, i) => (
+                                    <motion.button
+                                        key={i}
+                                        className="suggestion-pill"
+                                        onClick={() => handleSuggestedQuery(q)}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.3 + i * 0.06 }}
+                                        whileHover={{ scale: 1.04, y: -1 }}
+                                        whileTap={{ scale: 0.97 }}
+                                    >
+                                        <ArrowRight size={10} className="text-primary/60" />
+                                        {q}
+                                    </motion.button>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* Messages */}
+                    <AnimatePresence initial={false}>
+                        {messages.map((msg) => (
+                            <motion.div
+                                key={msg.id}
+                                variants={messageVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                                layout
+                            >
+                                <div className={cn(
+                                    "flex gap-3",
+                                    msg.role === 'user' ? "justify-end" : "justify-start"
+                                )}>
+                                    {/* Avatar — left for assistant/error */}
+                                    {msg.role !== 'user' && (
+                                        <div className={cn(
+                                            "w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1",
+                                            msg.role === 'error'
+                                                ? "bg-rose-500/20"
+                                                : "bg-primary/20 shadow-[0_0_10px_rgba(99,102,241,0.3)]"
+                                        )}>
+                                            {msg.role === 'error'
+                                                ? <AlertCircle size={14} className="text-rose-400" />
+                                                : <Terminal size={14} className="text-primary" />
+                                            }
+                                        </div>
+                                    )}
+
+                                    {/* Message content */}
+                                    <div className={cn(
+                                        "max-w-[75%] space-y-2",
+                                        msg.role === 'user' ? "items-end" : "items-start"
+                                    )}>
+                                        {/* Text bubble */}
+                                        <div className={cn(
+                                            "p-4 rounded-2xl text-sm leading-relaxed",
+                                            msg.role === 'user'
+                                                ? "bg-primary/15 border border-primary/25 rounded-br-md text-slate-200"
+                                                : msg.role === 'error'
+                                                    ? "bg-rose-500/10 border border-rose-500/20 rounded-tl-none text-rose-300"
+                                                    : "bg-slate-800/40 border border-slate-700/30 rounded-tl-none text-slate-300 whitespace-pre-wrap break-words"
+                                        )}>
+                                            {msg.content}
+                                        </div>
+
+                                        {/* Image thumbnail */}
+                                        {msg.imageUrl && (
+                                            <motion.div
+                                                className="chat-image-wrapper group"
+                                                whileHover={{ scale: 1.02 }}
+                                                whileTap={{ scale: 0.98 }}
+                                                onClick={() => openLightbox(msg.imageUrl!, `img-${msg.id}`)}
+                                            >
+                                                <motion.img
+                                                    layoutId={`img-${msg.id}`}
+                                                    src={msg.imageUrl}
+                                                    alt="Generated visualization"
+                                                    className="chat-image"
+                                                    loading="lazy"
+                                                />
+                                                {/* Hover overlay */}
+                                                <div className="chat-image-overlay">
+                                                    <div className="chat-image-zoom-badge">
+                                                        <ZoomIn size={16} />
+                                                        <span>Click to enlarge</span>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+
+                                        {/* Metadata pills */}
+                                        {msg.metadata && (
+                                            <div className="flex gap-2 flex-wrap pt-1">
+                                                {Object.entries(msg.metadata).map(([key, val], i) => (
+                                                    <motion.span
+                                                        key={key}
+                                                        className="metadata-pill"
+                                                        custom={i}
+                                                        variants={metadataVariants}
+                                                        initial="hidden"
+                                                        animate="visible"
+                                                    >
+                                                        {key}: {String(val)}
+                                                    </motion.span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Avatar — right for user */}
+                                    {msg.role === 'user' && (
+                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center shrink-0 mt-1 shadow-neon">
+                                            <span className="text-xs font-bold text-white">U</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
+
+                    {/* Typing indicator */}
+                    <AnimatePresence>
                         {isLoading && (
-                            <div className="flex gap-3">
+                            <motion.div
+                                className="flex gap-3"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0 }}
+                            >
                                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0 shadow-[0_0_10px_rgba(99,102,241,0.3)]">
                                     <Terminal size={14} className="text-primary animate-pulse" />
                                 </div>
-                                <div className="bg-primary/10 p-3 rounded-2xl rounded-tr-none border border-primary/20 text-sm text-slate-400 flex items-center gap-2">
-                                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                <div className="bg-slate-800/40 border border-slate-700/30 p-4 rounded-2xl rounded-tl-none flex items-center gap-2">
+                                    <div className="typing-dot" style={{ animationDelay: '0ms' }} />
+                                    <div className="typing-dot" style={{ animationDelay: '150ms' }} />
+                                    <div className="typing-dot" style={{ animationDelay: '300ms' }} />
                                 </div>
-                            </div>
+                            </motion.div>
                         )}
+                    </AnimatePresence>
 
-                        <div ref={chatEndRef} />
-                    </div>
+                    <div ref={chatEndRef} />
                 </div>
 
-                <div className="glass p-3 rounded-t-none relative">
-                    <div className="absolute -top-3 left-6 text-[10px] font-bold tracking-wider text-primary uppercase bg-[#070810] px-2">Prompt</div>
-                    <div className="flex gap-2 items-center mb-2">
-                        <label className="text-[10px] text-slate-500 font-medium uppercase tracking-wider shrink-0">Table:</label>
+                {/* Input Area */}
+                <div className="border-t border-slate-800/50 p-4 relative">
+                    {/* Table selector + Tool mode toggle */}
+                    <div className="flex gap-2 items-center mb-3">
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500 font-semibold uppercase tracking-wider">
+                            <Database size={12} className="text-primary/60" />
+                            Table:
+                        </div>
                         <select
                             value={tableName}
                             onChange={e => setTableName(e.target.value)}
-                            className="bg-slate-800/60 border border-slate-700/50 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-primary transition-colors"
+                            className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-primary/50 transition-all"
                         >
                             {tables.length === 0 && <option value="">No tables</option>}
                             {tables.map(t => (
@@ -226,128 +484,67 @@ const QueryStudio = () => {
                         <button
                             onClick={() => setToolMode(!toolMode)}
                             className={cn(
-                                "ml-auto flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded border transition-all",
+                                "ml-auto flex items-center gap-1.5 text-[10px] font-semibold px-3 py-1.5 rounded-lg border transition-all duration-300",
                                 toolMode
-                                    ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                                    : "bg-white/5 text-slate-500 border-white/10 hover:text-slate-300"
+                                    ? "bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.1)]"
+                                    : "bg-white/5 text-slate-500 border-white/10 hover:text-slate-300 hover:bg-white/8"
                             )}
                             title="Toggle tool mode for visualizations"
                         >
-                            <Wrench size={10} />
-                            {toolMode ? 'Tool ON' : 'Tool'}
+                            <Wrench size={11} />
+                            {toolMode ? 'Tool Mode ON' : 'Tool Mode'}
                         </button>
                     </div>
-                    <div className="flex gap-2 relative">
-                        <input
-                            type="text"
+
+                    {/* Input + send */}
+                    <div className="chat-input-wrapper">
+                        <textarea
+                            ref={textareaRef}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder={toolMode ? "Describe a plot to generate..." : "Ask anything about your data..."}
-                            className="flex-1 bg-transparent border-none focus:ring-0 text-sm placeholder-slate-500 py-2 pl-2 text-white glow-focus"
+                            placeholder={toolMode ? "Describe a visualization to generate..." : "Ask anything about your data..."}
+                            className="chat-textarea"
                             disabled={isLoading}
+                            rows={1}
                         />
                         <button
                             onClick={handleSubmit}
                             disabled={isLoading || !prompt.trim() || !tableName}
                             className={cn(
-                                "bg-primary text-white p-2 rounded-lg transition-all flex items-center justify-center shadow-neon",
+                                "chat-send-btn",
                                 isLoading || !prompt.trim() || !tableName
-                                    ? "opacity-50 cursor-not-allowed"
-                                    : "hover:bg-primary/90"
+                                    ? "opacity-40 cursor-not-allowed"
+                                    : "hover:shadow-neon-strong hover:scale-105"
                             )}
                         >
                             <Send size={16} />
                         </button>
                     </div>
-                </div>
-            </div>
 
-            {/* Right Panel: AI Reasoning Engine */}
-            <div className="flex-1 flex flex-col gap-4">
-                <div className="glass p-6 flex flex-col flex-1 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                        <Cpu size={120} />
-                    </div>
-
-                    <h3 className="text-sm font-bold text-slate-300 mb-6 flex items-center gap-2">
-                        <div className={cn(
-                            "w-2 h-2 rounded-full shadow-[0_0_8px_#6366f1]",
-                            isLoading ? "bg-primary animate-pulse" : "bg-slate-600"
-                        )}></div>
-                        AI Reasoning Engine
-                        {toolMode && (
-                            <span className="text-[10px] text-amber-400 font-medium ml-2 flex items-center gap-1">
-                                <Wrench size={10} /> Tool Mode
-                            </span>
-                        )}
-                        {isLoading && (
-                            <span className="text-[10px] text-primary font-medium ml-2 animate-pulse">Processing...</span>
-                        )}
-                    </h3>
-
-                    <div className="flex-1 space-y-4">
-                        {REASONING_STEPS.map((step, idx) => {
-                            const isActive = activeStep === idx;
-                            const isDone = activeStep > idx;
-                            const isIdle = activeStep === -1;
-
-                            return (
-                                <div key={idx} className={cn(
-                                    "flex items-start gap-4 p-3 rounded-lg border transition-all duration-500",
-                                    isIdle ? "border-slate-800/30 text-slate-600" :
-                                        isActive ? "bg-primary/5 border-primary/20 shadow-[0_0_15px_rgba(99,102,241,0.05)]" :
-                                            isDone ? "bg-emerald-500/5 text-slate-400 border-emerald-500/10" :
-                                                "border-transparent text-slate-600"
-                                )}>
-                                    <div className="mt-0.5 relative shrink-0">
-                                        {isDone ? (
-                                            <CheckCircle2 size={16} className="text-emerald-500 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                                        ) : isActive ? (
-                                            <>
-                                                <Circle size={16} className="text-primary animate-spin" style={{ animationDuration: '3s' }} />
-                                                <div className="absolute inset-0 bg-primary/20 blur-md rounded-full"></div>
-                                            </>
-                                        ) : (
-                                            <Circle size={16} className="text-slate-700" />
-                                        )}
-                                    </div>
-
-                                    <div className="flex-1">
-                                        <p className={cn(
-                                            "text-sm font-medium",
-                                            isIdle ? "text-slate-600" :
-                                                isActive ? "text-primary" :
-                                                    isDone ? "text-slate-300" :
-                                                        "text-slate-600"
-                                        )}>
-                                            {step}
-                                        </p>
-                                    </div>
-
-                                    <div className="text-xs font-mono flex items-center gap-1 opacity-60">
-                                        {isActive && (
-                                            <Clock size={12} className="text-primary animate-pulse" />
-                                        )}
-                                        {isDone ? '✓' : isActive ? '...' : ''}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    <div className="mt-6 p-3 rounded-lg bg-[#0a0a14] border border-slate-800/50 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <div className="flex items-center justify-between mt-2">
+                        <p className="text-[10px] text-slate-600">
+                            Press <kbd className="kbd-hint">Enter</kbd> to send, <kbd className="kbd-hint">Shift+Enter</kbd> for new line
+                        </p>
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-600">
                             <div className={cn(
                                 "w-1.5 h-1.5 rounded-full",
                                 isLoading ? "bg-primary animate-pulse" : "bg-emerald-500"
-                            )}></div>
-                            PolarisIQ Backend
+                            )} />
+                            PolarisIQ
+                            <span className="font-mono text-slate-700 ml-1">localhost:8000</span>
                         </div>
-                        <span className="text-[10px] text-slate-600 font-mono">localhost:8000</span>
                     </div>
                 </div>
             </div>
+
+            {/* Lightbox */}
+            <ImageLightbox
+                src={lightboxSrc || ''}
+                isOpen={!!lightboxSrc}
+                onClose={() => setLightboxSrc(null)}
+                layoutId={lightboxId}
+            />
         </div>
     );
 };

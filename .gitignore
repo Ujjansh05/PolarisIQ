@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node
+node_modules/
+Frontend_polaris-iq/dist/
+Frontend_polaris-iq/node_modules/
+
+# Models (large files)
+models/
+*.gguf
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated charts/plots
+generated_charts/
+
+# Logs
+*.log
+
+# Gemini
+.gemini/

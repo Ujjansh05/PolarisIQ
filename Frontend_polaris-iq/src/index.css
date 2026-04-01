@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
 @layer base {
   body {
     @apply bg-background text-slate-100 min-h-screen antialiased selection:bg-primary selection:text-white;
@@ -33,5 +35,385 @@
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+}
+
+/* ── Lightbox ──────────────────────────────────────────────── */
+
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 4, 12, 0.92);
+  backdrop-filter: blur(16px) saturate(1.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+}
+
+.lightbox-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: linear-gradient(180deg, rgba(4, 4, 12, 0.8) 0%, transparent 100%);
+  z-index: 10;
+}
+
+.lightbox-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(17, 18, 30, 0.7);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.lightbox-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lightbox-btn:hover {
+  color: #e2e8f0;
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.lightbox-btn-accent {
+  color: #6366f1;
+}
+
+.lightbox-btn-accent:hover {
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.lightbox-btn-close {
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(17, 18, 30, 0.7);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  color: #94a3b8;
+}
+
+.lightbox-btn-close:hover {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.lightbox-zoom-badge {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Inter', monospace;
+  color: #818cf8;
+  min-width: 44px;
+  text-align: center;
+  padding: 4px 8px;
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 6px;
+}
+
+.lightbox-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(99, 102, 241, 0.15);
+  margin: 0 4px;
+}
+
+.lightbox-image-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  overflow: hidden;
+  padding: 60px 40px;
+}
+
+.lightbox-image {
+  max-width: 90%;
+  max-height: 85vh;
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.1),
+    0 4px 30px rgba(0, 0, 0, 0.4),
+    0 0 60px rgba(99, 102, 241, 0.08);
+  user-select: none;
+  transform-origin: center center;
+  transition: transform 0.15s ease-out;
+}
+
+.lightbox-hint {
+  position: absolute;
+  bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: rgba(17, 18, 30, 0.7);
+  border: 1px solid rgba(99, 102, 241, 0.1);
+  font-size: 11px;
+  color: #64748b;
+  z-index: 10;
+}
+
+.lightbox-hint-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.3);
+}
+
+/* ── Chat Image Thumbnails ─────────────────────────────────── */
+
+.chat-image-wrapper {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  background: rgba(7, 8, 16, 0.5);
+  transition: all 0.35s cubic-bezier(0.23, 1, 0.32, 1);
+  max-width: 500px;
+}
+
+.chat-image-wrapper:hover {
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow:
+    0 0 20px rgba(99, 102, 241, 0.1),
+    0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.chat-image {
+  width: 100%;
+  height: auto;
+  display: block;
+  transition: transform 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.chat-image-wrapper:hover .chat-image {
+  transform: scale(1.03);
+}
+
+.chat-image-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 4, 12, 0);
+  transition: all 0.3s ease;
+  opacity: 0;
+}
+
+.chat-image-wrapper:hover .chat-image-overlay {
+  background: rgba(4, 4, 12, 0.5);
+  opacity: 1;
+}
+
+.chat-image-zoom-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.15);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #c7d2fe;
+  font-size: 12px;
+  font-weight: 600;
+  transform: scale(0.9);
+  transition: transform 0.3s ease;
+}
+
+.chat-image-wrapper:hover .chat-image-zoom-badge {
+  transform: scale(1);
+}
+
+/* ── Metadata Pills ────────────────────────────────────────── */
+
+.metadata-pill {
+  font-size: 10px;
+  padding: 3px 10px;
+  background: rgba(99, 102, 241, 0.08);
+  color: #818cf8;
+  border-radius: 999px;
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: all 0.2s ease;
+}
+
+.metadata-pill:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+/* ── Suggestion Pills ──────────────────────────────────────── */
+
+.suggestion-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(17, 18, 30, 0.5);
+  border: 1px solid rgba(99, 102, 241, 0.12);
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.suggestion-pill:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.25);
+  color: #c7d2fe;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.08);
+}
+
+/* ── Chat Input ────────────────────────────────────────────── */
+
+.chat-input-wrapper {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(17, 18, 30, 0.5);
+  border: 1px solid rgba(99, 102, 241, 0.12);
+  transition: all 0.35s ease;
+}
+
+.chat-input-wrapper:focus-within {
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow:
+    0 0 0 3px rgba(99, 102, 241, 0.06),
+    0 0 20px rgba(99, 102, 241, 0.08);
+  background: rgba(17, 18, 30, 0.7);
+}
+
+.chat-textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  color: #e2e8f0;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 4px 0;
+  min-height: 24px;
+  max-height: 160px;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.chat-textarea::placeholder {
+  color: #475569;
+}
+
+.chat-textarea:disabled {
+  opacity: 0.5;
+}
+
+.chat-send-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  color: white;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+}
+
+.chat-send-btn:hover:not(:disabled) {
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+}
+
+/* ── Keyboard Hint ─────────────────────────────────────────── */
+
+.kbd-hint {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(17, 18, 30, 0.7);
+  border: 1px solid rgba(99, 102, 241, 0.12);
+  font-family: 'Inter', monospace;
+  font-size: 9px;
+  color: #64748b;
+  margin: 0 2px;
+}
+
+/* ── Reasoning Progress Shimmer ────────────────────────────── */
+
+.reasoning-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(99, 102, 241, 0.03) 25%,
+    rgba(99, 102, 241, 0.06) 50%,
+    rgba(99, 102, 241, 0.03) 75%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ── Typing Dots ───────────────────────────────────────────── */
+
+.typing-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6366f1;
+  animation: dotBounce 1.2s ease-in-out infinite;
+}
+
+@keyframes dotBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
   }
 }
