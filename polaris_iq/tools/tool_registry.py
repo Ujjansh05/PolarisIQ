@@ -32,3 +32,14 @@ VISUALIZATION_SCHEMA = {
         "required": ["x", "y", "table"],
     },
 }
+
+CORRELATION_SCHEMA = {
+    "name": "correlation_analysis",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "table": {"type": "string"}
+        },
+        "required": []
+    }
+}

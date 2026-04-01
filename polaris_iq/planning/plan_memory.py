@@ -16,11 +16,12 @@ class PlanMemory:
         )
         """)
 
-    def _hash_query(self, query: str):
-        return hashlib.sha256(query.encode()).hexdigest()
+    def _hash_query(self, query: str, table_name: str):
+        key = f"{table_name}::{query}"
+        return hashlib.sha256(key.encode()).hexdigest()
 
-    def store(self, query: str, plan: dict):
-        query_hash = self._hash_query(query)
+    def store(self, query: str, table_name: str, plan: dict):
+        query_hash = self._hash_query(query, table_name)
 
         self.conn.execute(
             """
@@ -29,8 +30,8 @@ class PlanMemory:
             [query_hash, query, json.dumps(plan)],
         )
 
-    def retrieve(self, query: str):
-        query_hash = self._hash_query(query)
+    def retrieve(self, query: str, table_name: str):
+        query_hash = self._hash_query(query, table_name)
 
         result = self.conn.execute(
             """

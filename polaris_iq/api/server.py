@@ -166,9 +166,10 @@ def table_schema(table_name: str):
             })
 
         try:
-            metadata = engine.conn.execute("""
+            metadata = engine.conn.execute(f"""
                 SELECT column_name, null_ratio
                 FROM polaris_metadata
+                WHERE table_name = '{table_name}'
             """).fetchall()
             null_map = {row[0]: round(row[1] * 100, 2) for row in metadata}
             for col in columns:
@@ -320,9 +321,10 @@ def table_correlations(table_name: str):
     with _db_lock:
         correlations = []
         try:
-            rows = engine.conn.execute("""
+            rows = engine.conn.execute(f"""
                 SELECT column_x, column_y, correlation
                 FROM polaris_correlations
+                WHERE table_name = '{table_name}'
             """).fetchall()
 
             for row in rows:
@@ -342,9 +344,10 @@ def table_statistics(table_name: str):
     with _db_lock:
         statistics = []
         try:
-            rows = engine.conn.execute("""
+            rows = engine.conn.execute(f"""
                 SELECT column_name, mean, std, min, max
                 FROM polaris_statistics
+                WHERE table_name = '{table_name}'
             """).fetchall()
 
             for row in rows:

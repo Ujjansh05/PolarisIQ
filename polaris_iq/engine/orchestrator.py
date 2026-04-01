@@ -44,7 +44,7 @@ class PolarisOrchestrator:
         start_time = time.time()
 
         # 1. Plan memory lookup
-        stored_plan = self.plan_memory.retrieve(user_query)
+        stored_plan = self.plan_memory.retrieve(user_query, table_name)
 
         if stored_plan:
             plan = QueryPlan(**stored_plan)
@@ -60,7 +60,7 @@ class PolarisOrchestrator:
             except Exception:
                 pass
 
-            self.plan_memory.store(user_query, plan.model_dump())
+            self.plan_memory.store(user_query, table_name, plan.model_dump())
 
         # 2. Cost estimation
         cost_info = self.cost_estimator.estimate(plan, table_name)

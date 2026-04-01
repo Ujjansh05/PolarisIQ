@@ -62,16 +62,36 @@ def persist_polars_to_duckdb(
 
 
 def run_schema_profiling(conn: duckdb.DuckDBPyConnection, table_name: str):
+    cols = [r[0] for r in conn.execute(f"DESCRIBE {table_name}").fetchall()]
+    unpivot_cols = ", ".join([f'"{c}"' for c in cols])
+    select_cast = ", ".join([f'"{c}"::VARCHAR AS "{c}"' for c in cols])
+
+    try:
+        conn.execute("SELECT table_name FROM polaris_metadata LIMIT 1")
+    except Exception:
+        conn.execute("DROP TABLE IF EXISTS polaris_metadata")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS polaris_metadata (
+            table_name VARCHAR,
+            column_name VARCHAR,
+            data_type VARCHAR,
+            null_ratio DOUBLE
+        )
+    """)
+    conn.execute(f"DELETE FROM polaris_metadata WHERE table_name = '{table_name}'")
+
     conn.execute(f"""
-        CREATE OR REPLACE TABLE polaris_metadata AS
+        INSERT INTO polaris_metadata
         SELECT
+            '{table_name}',
             u.column_name,
             i.data_type,
             COUNT(*) FILTER (WHERE u.value IS NULL) * 1.0 / COUNT(*) AS null_ratio
         FROM (
-            SELECT * FROM {table_name}
+            SELECT {select_cast} FROM {table_name}
         )
-        UNPIVOT(value FOR column_name IN (*)) u
+        UNPIVOT(value FOR column_name IN ({unpivot_cols})) u
         JOIN information_schema.columns i
             ON i.column_name = u.column_name
             AND i.table_name = '{table_name}'
@@ -80,19 +100,48 @@ def run_schema_profiling(conn: duckdb.DuckDBPyConnection, table_name: str):
 
 
 def run_statistical_profiling(conn: duckdb.DuckDBPyConnection, table_name: str):
+    cols = conn.execute(f"DESCRIBE {table_name}").fetchall()
+    numeric_cols = [
+        c[0] for c in cols 
+        if any(t in c[1].upper() for t in ["INT", "FLOAT", "DOUBLE", "DECIMAL", "BIGINT", "NUMERIC"])
+    ]
+    if not numeric_cols:
+        conn.execute("CREATE OR REPLACE TABLE polaris_statistics(column_name VARCHAR, mean DOUBLE, std DOUBLE, min DOUBLE, max DOUBLE)")
+        return
+        
+    unpivot_cols = ", ".join([f'"{c}"' for c in numeric_cols])
+    select_cast = ", ".join([f'"{c}"::DOUBLE AS "{c}"' for c in numeric_cols])
+
+    try:
+        conn.execute("SELECT table_name FROM polaris_statistics LIMIT 1")
+    except Exception:
+        conn.execute("DROP TABLE IF EXISTS polaris_statistics")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS polaris_statistics (
+            table_name VARCHAR,
+            column_name VARCHAR,
+            mean DOUBLE,
+            std DOUBLE,
+            min DOUBLE,
+            max DOUBLE
+        )
+    """)
+    conn.execute(f"DELETE FROM polaris_statistics WHERE table_name = '{table_name}'")
+
     conn.execute(f"""
-        CREATE OR REPLACE TABLE polaris_statistics AS
+        INSERT INTO polaris_statistics
         SELECT
+            '{table_name}',
             column_name,
             avg(value) AS mean,
             stddev(value) AS std,
             min(value) AS min,
             max(value) AS max
         FROM (
-            SELECT * FROM {table_name}
+            SELECT {select_cast} FROM {table_name}
         )
-        UNPIVOT(value FOR column_name IN (*))
-        WHERE typeof(value) IN ('INTEGER','DOUBLE')
+        UNPIVOT(value FOR column_name IN ({unpivot_cols}))
         GROUP BY column_name
     """)
 
@@ -108,14 +157,20 @@ def run_correlation_profiling(conn: duckdb.DuckDBPyConnection, table_name: str):
 
     numeric_cols = [col[0] for col in numeric_cols]
 
-    conn.execute("DROP TABLE IF EXISTS polaris_correlations")
+    try:
+        conn.execute("SELECT table_name FROM polaris_correlations LIMIT 1")
+    except Exception:
+        conn.execute("DROP TABLE IF EXISTS polaris_correlations")
+
     conn.execute("""
-        CREATE TABLE polaris_correlations (
+        CREATE TABLE IF NOT EXISTS polaris_correlations (
+            table_name VARCHAR,
             column_x VARCHAR,
             column_y VARCHAR,
             correlation DOUBLE
         )
     """)
+    conn.execute(f"DELETE FROM polaris_correlations WHERE table_name = '{table_name}'")
 
     for i in range(len(numeric_cols)):
         for j in range(i + 1, len(numeric_cols)):
@@ -123,15 +178,15 @@ def run_correlation_profiling(conn: duckdb.DuckDBPyConnection, table_name: str):
             col_y = numeric_cols[j]
 
             result = conn.execute(f"""
-                SELECT corr({col_x}, {col_y})
+                SELECT corr("{col_x}", "{col_y}")
                 FROM {table_name}
             """).fetchone()[0]
 
             conn.execute(
                 """
-                INSERT INTO polaris_correlations VALUES (?, ?, ?)
+                INSERT INTO polaris_correlations VALUES (?, ?, ?, ?)
             """,
-                [col_x, col_y, result],
+                [table_name, col_x, col_y, result],
             )
 
 

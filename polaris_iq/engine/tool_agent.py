@@ -76,7 +76,11 @@ Available tools:
    Parameters: x (string, column name), y (string, column name), chart_type (string: "line", "scatter", or "bar"), table (string, table name)
    Description: Generates a plot from database columns.
 
-2. final_answer
+2. correlation_analysis
+   Parameters: table (string, table name)
+   Description: Gets all precomputed column correlations for the dataset.
+
+3. final_answer
    Parameters: text (string, your final answer text)
    Description: Use this when you have completed the task and want to return the result.
 
@@ -88,7 +92,7 @@ Previous Tool Calls:
 {history_str}
 
 Respond with ONLY a single valid JSON object. Example:
-{{"tool": "generate_plot", "arguments": {{"x": "YearsExperience", "y": "Salary", "chart_type": "line", "table": "test_table"}}}}
+{{"tool": "generate_plot", "arguments": {{"x": "numeric_column_X", "y": "numeric_column_Y", "chart_type": "line", "table": "dummy_table"}}}}
 """
 
     def _parse_tool_call(self, response: str) -> dict:

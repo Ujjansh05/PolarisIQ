@@ -61,13 +61,16 @@ IMPORTANT CONSTRAINTS:
 - For aggregation, use the "statistics" field with "type" and "parameters". Parameters MUST contain "columns" (list of column names to aggregate), and optionally "group_by" (list of column names to group by) and "aggregate" (the function name, e.g. "AVG", "SUM", "COUNT", "MIN", "MAX"). You may also provide "sql" with a ready-to-run DuckDB SQL query.
 - For correlation_analysis, use "statistics" with "parameters" containing "columns" (a list of 2 column names).
 - For regression_analysis, use the "prediction" field with "type": "linear_regression" and "parameters" containing "independent" (list of column names) and "dependent" (single column name).
-- For visualization, set "intent" to "visualization" and "execution_engine" to "visualization". Use the "statistics" field with "parameters" containing "x" (column name for x-axis), "y" (column name for y-axis), and "chart_type" (one of: "scatter", "line", "bar", "histogram"). Pick the most relevant numeric columns from the dataset for x and y.
+- For visualization, set "intent" to "visualization" and "execution_engine" to "visualization". Use the "statistics" field with "parameters" containing "x" (column name for x-axis), "y" (column name for y-axis), and "chart_type" (one of: "scatter", "line", "bar", "histogram", "pie", "custom"). Pick the most relevant numeric columns from the dataset for x and y. If the user asks for a very complex or highly customized chart (e.g. 3D, violin, heatmap, clustered), set "chart_type": "custom" and provide a "custom_code" parameter containing a raw Python script. The script will be executed with access to `df` (pandas DataFrame of the table) and `filepath` (string path to save the plot). The script MUST end with `plt.savefig(filepath)` to save the image. Do NOT include markdown blocks in the `custom_code` string itself, just raw python.
 
 Example for aggregation (average salary by education level):
-{{"intent":"aggregation","data_scope":{{"tables":["salary_dataset"]}},"statistics":{{"type":["avg"],"parameters":{{"columns":["Salary"],"group_by":["Education Level"],"aggregate":"AVG"}}}},"execution_engine":"duckdb","explanation_level":"brief"}}
+{{"intent":"aggregation","data_scope":{{"tables":["dummy_dataset"]}},"statistics":{{"type":["avg"],"parameters":{{"columns":["numeric_column_A"],"group_by":["category_column_B"],"aggregate":"AVG"}}}},"execution_engine":"duckdb","explanation_level":"brief"}}
 
-Example for visualization (scatter plot):
-{{"intent":"visualization","data_scope":{{"tables":["salary_dataset"]}},"statistics":{{"type":["scatter"],"parameters":{{"x":"Years of Experience","y":"Salary","chart_type":"scatter"}}}},"execution_engine":"visualization","explanation_level":"brief"}}
+Example for simple visualization (scatter plot):
+{{"intent":"visualization","data_scope":{{"tables":["dummy_dataset"]}},"statistics":{{"type":["scatter"],"parameters":{{"x":"numeric_column_X","y":"numeric_column_Y","chart_type":"scatter"}}}},"execution_engine":"visualization","explanation_level":"brief"}}
+
+Example for custom visualization (custom python code):
+{{"intent":"visualization","data_scope":{{"tables":["dummy_dataset"]}},"statistics":{{"type":["custom"],"parameters":{{"chart_type":"custom","custom_code":"import seaborn as sns\\nimport matplotlib.pyplot as plt\\n\\nsns.violinplot(data=df, x='col_x', y='col_y')\\nplt.title('Custom Violin')\\nplt.savefig(filepath)\\nplt.close()"}}}},"execution_engine":"visualization","explanation_level":"brief"}}
 
 Example for regression:
 {{"intent":"regression_analysis","data_scope":{{"tables":["my_table"]}},"prediction":{{"type":"linear_regression","parameters":{{"independent":["col_x"],"dependent":"col_y"}}}},"execution_engine":"python_sklearn","explanation_level":"brief"}}

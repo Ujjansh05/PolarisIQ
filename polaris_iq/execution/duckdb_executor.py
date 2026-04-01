@@ -115,13 +115,30 @@ class DuckDBExecutor:
 
         if not tables:
             raise ExecutionError("No table specified in the plan.")
-        if len(columns) < 2:
-            raise ExecutionError(
-                "Correlation analysis requires at least 2 columns "
-                "in 'statistics.parameters.columns'."
-            )
 
         table = tables[0]
+
+        # If columns are not specified or less than 2, return top precomputed correlations
+        if len(columns) < 2:
+            try:
+                # Query precomputed correlations
+                result = self.conn.execute(
+                    f"SELECT column_x, column_y, correlation FROM polaris_correlations "
+                    f"WHERE correlation IS NOT NULL AND table_name = '{table}' "
+                    f"ORDER BY abs(correlation) DESC LIMIT 10"
+                ).fetchall()
+                
+                correlations = [{"col_x": r[0], "col_y": r[1], "corr": round(r[2], 4)} for r in result]
+                return {
+                    "analysis_type": "correlation_summary",
+                    "top_correlations": correlations
+                }
+            except Exception:
+                raise ExecutionError(
+                    "Correlation analysis requires at least 2 columns "
+                    "in 'statistics.parameters.columns', and fallback precomputed correlations failed."
+                )
+
         col_x, col_y = columns[0], columns[1]
 
         try:
@@ -137,6 +154,7 @@ class DuckDBExecutor:
             "analysis_type": "correlation",
             "correlation": float(corr_value) if corr_value is not None else None,
         }
+
 
     # ── Helpers ──────────────────────────────────────────────────
 
