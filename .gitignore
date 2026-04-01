@@ -32,6 +32,7 @@ models/
 *.db
 *.sqlite
 *.sqlite3
+*.wal
 
 # Environment
 .env
@@ -43,6 +44,7 @@ Thumbs.db
 
 # Generated charts/plots
 generated_charts/
+generated_plots/
 
 # Logs
 *.log
