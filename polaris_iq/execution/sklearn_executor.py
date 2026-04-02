@@ -38,11 +38,18 @@ class SklearnExecutor:
             if isinstance(independent, str):
                 independent = [independent]
             
+            # Deduplicate independent columns to prevent X[col] from returning a DataFrame
+            independent = list(dict.fromkeys(independent))
+            
             # Normalize to string for dependent variable
             if isinstance(dependent, list) and len(dependent) > 0:
                 dependent = dependent[0]
             elif isinstance(dependent, list):
                 return {"analysis_type": intent, "error": "Dependent parameter cannot be an empty list."}
+
+            # Avoid Target Leakage & Duplicate Columns
+            if dependent in independent:
+                independent.remove(dependent)
 
             # Validate columns
             if dependent not in df.columns:

@@ -12,6 +12,7 @@ import ImageLightbox from '../ui/ImageLightbox';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
 interface ChatMessage {
@@ -388,6 +389,30 @@ const QueryStudio = () => {
                                                 <ReactMarkdown
                                                     remarkPlugins={[remarkMath]}
                                                     rehypePlugins={[rehypeKatex]}
+                                                    components={{
+                                                        code(props: any) {
+                                                            const { node, className, children, ...rest } = props;
+                                                            const str = String(children).replace(/\n$/, '');
+                                                            // Detect if the code block is actually LaTeX math wrapped in backticks
+                                                            const isMath = str.includes('\\text{') || str.includes('\\frac') || str.includes('\\beta') || str.includes('\\times') || str.includes('\\cdot') || str.includes('^') || className?.includes('language-latex') || className?.includes('language-math');
+                                                            
+                                                            if (isMath) {
+                                                                try {
+                                                                    const isBlock = String(children).includes('\\n') || className;
+                                                                    return (
+                                                                        <span 
+                                                                            dangerouslySetInnerHTML={{ 
+                                                                                __html: katex.renderToString(str, { throwOnError: false, displayMode: !!isBlock }) 
+                                                                            }} 
+                                                                        />
+                                                                    );
+                                                                } catch (e) {
+                                                                    // Fallback to normal code if KaTeX fails completely
+                                                                }
+                                                            }
+                                                            return <code className={className} {...rest}>{children}</code>;
+                                                        }
+                                                    }}
                                                 >
                                                     {msg.content}
                                                 </ReactMarkdown>
