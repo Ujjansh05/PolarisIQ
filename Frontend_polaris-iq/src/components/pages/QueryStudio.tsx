@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Send, Terminal, CheckCircle2, Circle, Clock,
     AlertCircle, Sparkles, Wrench, ZoomIn, Database,
-    ArrowRight, Cpu
+    ArrowRight, Cpu, Trash2
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { sendQuery, sendToolQuery, fetchTables } from '../../services/api';
@@ -46,9 +46,15 @@ const nextMsgId = () => `msg-${++msgIdCounter}-${Date.now()}`;
 
 const QueryStudio = () => {
     const [prompt, setPrompt] = useState('');
-    const [tableName, setTableName] = useState('');
+    const [tableName, setTableName] = useState(() => localStorage.getItem('polarisiq_table_name') || '');
     const [tables, setTables] = useState<TableInfo[]>([]);
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [messages, setMessages] = useState<ChatMessage[]>(() => {
+        try {
+            const saved = localStorage.getItem('polarisiq_chat_history');
+            if (saved) return JSON.parse(saved);
+        } catch { }
+        return [];
+    });
     const [isLoading, setIsLoading] = useState(false);
     const [activeStep, setActiveStep] = useState(-1);
     const [toolMode, setToolMode] = useState(false);
@@ -72,6 +78,16 @@ const QueryStudio = () => {
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
+
+    useEffect(() => {
+        localStorage.setItem('polarisiq_chat_history', JSON.stringify(messages));
+    }, [messages]);
+
+    useEffect(() => {
+        if (tableName) {
+            localStorage.setItem('polarisiq_table_name', tableName);
+        }
+    }, [tableName]);
 
     useEffect(() => {
         return () => {
@@ -172,6 +188,11 @@ const QueryStudio = () => {
             e.preventDefault();
             handleSubmit();
         }
+    };
+
+    const clearChat = () => {
+        setMessages([]);
+        localStorage.removeItem('polarisiq_chat_history');
     };
 
     const openLightbox = (src: string, layoutId: string) => {
@@ -308,9 +329,9 @@ const QueryStudio = () => {
                             animate={{ opacity: 1 }}
                             transition={{ delay: 0.2 }}
                         >
-                            <div className="relative mb-6">
-                                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center border border-primary/10">
-                                    <Sparkles size={28} className="text-primary" />
+                            <div className="relative mb-6 pt-8">
+                                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#0c1328] to-[#121c38] flex items-center justify-center border border-primary/30 overflow-hidden shadow-neon-strong">
+                                    <img src="/logo.png" alt="PolarisIQ Logo" className="w-[85%] h-[85%] object-contain drop-shadow-md brightness-110" />
                                 </div>
                                 <div className="absolute -inset-4 bg-primary/5 rounded-3xl blur-xl -z-10" />
                             </div>
@@ -519,19 +540,28 @@ const QueryStudio = () => {
                             ))}
                         </select>
 
-                        <button
-                            onClick={() => setToolMode(!toolMode)}
-                            className={cn(
-                                "ml-auto flex items-center gap-1.5 text-[10px] font-semibold px-3 py-1.5 rounded-lg border transition-all duration-300",
-                                toolMode
-                                    ? "bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.1)]"
-                                    : "bg-white/5 text-slate-500 border-white/10 hover:text-slate-300 hover:bg-white/8"
-                            )}
-                            title="Toggle tool mode for visualizations"
-                        >
-                            <Wrench size={11} />
-                            {toolMode ? 'Tool Mode ON' : 'Tool Mode'}
-                        </button>
+                        <div className="ml-auto flex items-center gap-2">
+                            <button
+                                onClick={clearChat}
+                                className="flex items-center gap-1.5 text-[10px] font-semibold px-3 py-1.5 rounded-lg border bg-white/5 text-slate-500 border-white/10 hover:text-slate-300 hover:bg-white/8 transition-all duration-300"
+                                title="Clear chat history"
+                            >
+                                <Trash2 size={11} /> Clear
+                            </button>
+                            <button
+                                onClick={() => setToolMode(!toolMode)}
+                                className={cn(
+                                    "flex items-center gap-1.5 text-[10px] font-semibold px-3 py-1.5 rounded-lg border transition-all duration-300",
+                                    toolMode
+                                        ? "bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.1)]"
+                                        : "bg-white/5 text-slate-500 border-white/10 hover:text-slate-300 hover:bg-white/8"
+                                )}
+                                title="Toggle tool mode for visualizations"
+                            >
+                                <Wrench size={11} />
+                                {toolMode ? 'Tool Mode ON' : 'Tool Mode'}
+                            </button>
+                        </div>
                     </div>
 
                     {/* Input + send */}
@@ -564,13 +594,14 @@ const QueryStudio = () => {
                         <p className="text-[10px] text-slate-600">
                             Press <kbd className="kbd-hint">Enter</kbd> to send, <kbd className="kbd-hint">Shift+Enter</kbd> for new line
                         </p>
-                        <div className="flex items-center gap-1.5 text-[10px] text-slate-600">
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium">
                             <div className={cn(
-                                "w-1.5 h-1.5 rounded-full",
-                                isLoading ? "bg-primary animate-pulse" : "bg-emerald-500"
+                                "w-1.5 h-1.5 rounded-full shadow-[0_0_8px_currentColor]",
+                                isLoading ? "bg-primary text-primary animate-pulse" : "bg-emerald-500 text-emerald-500"
                             )} />
-                            PolarisIQ
-                            <span className="font-mono text-slate-700 ml-1">localhost:8000</span>
+                            <img src="/logo.png" alt="Logo" className="w-3.5 h-3.5 opacity-80 mix-blend-screen ml-1" />
+                            PolarisIQ Engine
+                            <span className="font-mono text-slate-700 ml-1.5">localhost:8000</span>
                         </div>
                     </div>
                 </div>
