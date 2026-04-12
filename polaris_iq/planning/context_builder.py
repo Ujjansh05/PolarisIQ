@@ -9,7 +9,8 @@ def build_llm_context(conn: duckdb.DuckDBPyConnection, table_name: str) -> str:
         metadata = conn.execute("""
             SELECT column_name, data_type, null_ratio
             FROM polaris_metadata
-        """).fetchall()
+            WHERE table_name = ?
+        """, [table_name]).fetchall()
     except Exception:
         metadata = []
 
@@ -17,7 +18,8 @@ def build_llm_context(conn: duckdb.DuckDBPyConnection, table_name: str) -> str:
         stats = conn.execute("""
             SELECT column_name, mean, std, min, max
             FROM polaris_statistics
-        """).fetchall()
+            WHERE table_name = ?
+        """, [table_name]).fetchall()
     except Exception:
         stats = []
 
