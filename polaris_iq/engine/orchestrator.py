@@ -42,25 +42,40 @@ class PolarisOrchestrator:
     def handle_query(self, user_query: str, table_name: str):
 
         start_time = time.time()
+        context = build_llm_context(self.conn, table_name)
 
         # 1. Plan memory lookup
         stored_plan = self.plan_memory.retrieve(user_query, table_name)
 
+        plan = None
         if stored_plan:
-            plan = QueryPlan(**stored_plan)
-            context = build_llm_context(self.conn, table_name)
-        else:
-            context = build_llm_context(self.conn, table_name)
-
-            plan = generate_structured_plan(user_query, context, self.model)
-
-            # Validate but do not hard-fail — let the executor handle bad plans
             try:
-                validate_plan(self.conn, plan, table_name)
+                candidate_plan = QueryPlan(**stored_plan)
+                validate_plan(self.conn, candidate_plan, table_name)
+                plan = candidate_plan
             except Exception:
-                pass
+                # Drop stale/invalid cached plans and regenerate.
+                try:
+                    self.plan_memory.delete(user_query, table_name)
+                except Exception:
+                    pass
 
-            self.plan_memory.store(user_query, table_name, plan.model_dump())
+        if plan is None:
+            is_valid = False
+            used_fallback = False
+            try:
+                plan = generate_structured_plan(user_query, context, self.model)
+                validate_plan(self.conn, plan, table_name)
+                is_valid = True
+            except Exception:
+                # LLM can occasionally return malformed/empty JSON plans (e.g. {}).
+                # Fall back to a deterministic safe plan instead of returning HTTP 500.
+                plan = self._build_fallback_plan(user_query, table_name)
+                is_valid = True
+                used_fallback = True
+
+            if is_valid and not used_fallback:
+                self.plan_memory.store(user_query, table_name, plan.model_dump())
 
         # 2. Cost estimation
         cost_info = self.cost_estimator.estimate(plan, table_name)
@@ -85,13 +100,16 @@ class PolarisOrchestrator:
             pass
 
         # 7. Explanation — pass user query and context for targeted answers
-        explanation = self.explanation_engine.generate(
-            result,
-            plan.explanation_level,
-            self.model,
-            user_query=user_query,
-            context=context,
-        )
+        try:
+            explanation = self.explanation_engine.generate(
+                result,
+                plan.explanation_level,
+                self.model,
+                user_query=user_query,
+                context=context,
+            )
+        except Exception:
+            explanation = self._fallback_explanation(result)
 
         response = {
             "explanation": explanation,
@@ -146,4 +164,55 @@ class PolarisOrchestrator:
             return None
         filename = os.path.basename(file_path)
         return f"/plots/{filename}"
+
+    @staticmethod
+    def _is_visualization_query(user_query: str) -> bool:
+        q = (user_query or "").lower()
+        keywords = [
+            "plot", "chart", "graph", "visual", "visualize",
+            "histogram", "scatter", "bar", "line", "pie",
+        ]
+        return any(k in q for k in keywords)
+
+    @staticmethod
+    def _is_correlation_query(user_query: str) -> bool:
+        q = (user_query or "").lower()
+        keywords = ["correlation", "correlate", "relation", "relationship"]
+        return any(k in q for k in keywords)
+
+    def _build_fallback_plan(self, user_query: str, table_name: str) -> QueryPlan:
+        if self._is_visualization_query(user_query):
+            return QueryPlan(
+                intent="visualization",
+                data_scope={"tables": [table_name]},
+                statistics={"type": ["auto"], "parameters": {"chart_type": "scatter"}},
+                execution_engine="visualization",
+                explanation_level="brief",
+            )
+
+        if self._is_correlation_query(user_query):
+            return QueryPlan(
+                intent="correlation_analysis",
+                data_scope={"tables": [table_name]},
+                statistics={"type": ["correlation"], "parameters": {"columns": []}},
+                execution_engine="duckdb",
+                explanation_level="brief",
+            )
+
+        # Safe default: numeric summary aggregation.
+        return QueryPlan(
+            intent="aggregation",
+            data_scope={"tables": [table_name]},
+            statistics={"type": ["summary"], "parameters": {}},
+            execution_engine="duckdb",
+            explanation_level="brief",
+        )
+
+    @staticmethod
+    def _fallback_explanation(result) -> str:
+        if isinstance(result, dict):
+            if "error" in result:
+                return f"I hit an execution issue: {result['error']}"
+            return f"Here is the computed result: {result}"
+        return f"Here is the computed result: {result}"
 
